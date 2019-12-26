@@ -1,22 +1,48 @@
 
-## Usage
-install packages `rsa` and `requests`   
+## Prerequisites
+Install packages `ptpython`  `rsa` and `requests`   
 ```bash
-pip install requests
-pip install rsa
+pip install requests rsa ptpython
 # or
-python2 -m pip install requests
-python2 -m pip install requests
+python3 -m pip install requests rsa
 ```
 
-## Example
+## Usage
+
+Change your Camera IP, username, password at the bottom of the script.
+
+```bash
+vim mercury.py  # change your Camera IP, username, password
 ```
-python2 mipcc.py admin password url data
-python2 mipcc.py admin password http://192.168.2.89:80 '{"method":"do","preset":{"goto_preset": {"id": "1"}}}'
+
+Run it. After logged in, you'll get an interactive shell. Just send your payload data to `mer.send_request`.
+
+```bash
+./mercury.py
+INFO     login        Retrive RSA Pubkey and Nonce
+DEBUG    login        Response: 200 {'error_code': -40401, 'data': {'code': -40410, 'encrypt_type': ['1', '2'], 'key': 'MIGf<redacted>iwIDAQAB', 'nonce': '3f<redacted>0'}}
+DEBUG    login        Encrypted password: J+WJ2<redacted>sv4=
+INFO     login        Login with username [admin]
+DEBUG    login        Login response: 200 {'error_code': 0, 'stok': '9fafab<redacted>6dfec', 'user_group': 'root'}
+DEBUG    <module>     <__main__.MercuryIPC object at 0x1065c77d0>
+INFO     <module>     Mercury IPC is available at variable [mer], fire at will ;p
+
+>>> mer.send_request(mer.PAYLOAD_SET_LENMASK_ON)                                                                   
+DEBUG    send_request Sending request: {'method': 'set', 'lens_mask': {'lens_mask_info': {'enabled': 'on'}}}
+DEBUG    send_request Response: 200 {'error_code': 0}
+<Response [200]>
+
+>>> mer.send_request({"method":"do","preset":{"goto_preset": {"id": "3"}}})                                        
+DEBUG    send_request Sending request: {'method': 'do', 'preset': {'goto_preset': {'id': '3'}}}
+DEBUG    send_request Response: 200 {'error_code': 0}
+<Response [200]>
+
 ```
+
 
 
 ## Data Example
+
 ```json
 // add PTZ preset position 添加预置点
 {"method":"do","preset":{"set_preset":{"name":"name","save_ptz":"1"}}}
