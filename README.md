@@ -1,38 +1,130 @@
 
 ## Prerequisites
-Install packages `ptpython`  `rsa` and `requests`   
+Install packages `ptpython`  `rsa` and `requests`
 ```bash
 pip install requests rsa ptpython
 # or
 python3 -m pip install requests rsa
 ```
 
+## Features
+
+- Simple command line syntax
+- Cache login status (`stok`)
+- Automatically renew token if expired
+- Extensible, customizable
+- Interactive shell
+
 ## Usage
 
-Change your Camera IP, username, password at the bottom of the script.
 
 ```bash
-vim mercury.py  # change your Camera IP, username, password
+$ ./mercury.py --help
+usage: mercury.py [-c CONFIG] [-h HOST] [-u USERNAME] [-p PASSWORD] [-d]
+                  [--help]
+                  [camera] {interactive,send,presets,goto,mask} ...
+
+positional arguments:
+  camera                Specify the Camera to use. default: cmdline
+  {interactive,send,presets,goto,mask}
+                        Functions to call
+  action_args           Function arguments
+
+optional arguments:
+  -c CONFIG, --config CONFIG
+                        config file to read IPC endpoints
+  -h HOST, --host HOST  Camera web interface URL
+  -u USERNAME, --username USERNAME
+                        Camera admin username
+  -p PASSWORD, --password PASSWORD
+                        Camera admin password
+  -d, --debug           Print additional debug logs
+  --help                RT
+
 ```
 
-Run it. After logged in, you'll get an interactive shell. Just send your payload data to `mer.send_request`.
+## Commands
+
+### send
+
+There are two options.
+
+1. the predefined payloads inside [mercury.py](https://github.com/ttimasdf/mercury-ipc-control/blob/97b0cec989db2406b4f8a698a15f734e2861aed1/mercury.py#L159-L205).
+
+   ```bash
+   ./mercury.py ipc1 send PAYLOAD_SET_LED_OFF
+   ```
+
+2. Send payload string directly.
+
+   ```bash
+   ./mercury.py ipc1 send "{'method': 'do', 'preset': {'goto_preset': {'id': '1'}}}"
+   ```
+
+### presets
+
+Print presets config of specific camera. Preset ID and name is ordered by create time, NOT numeric, NOT necessarily start from 1.
 
 ```bash
-./mercury.py
+$ ./mercury.py ipc1 presets
+INFO     sendRequest  Sending request: {'method': 'get', 'preset': {'name': ['preset']}}
+
+Presets: 
+2  面壁        
+
+INFO     main         Saving configs back
+INFO     main         Bye
+
+```
+
+### goto
+
+Goto saved location with numeric ID.
+
+```bash
+./mercury.py ipc1 goto 2
+```
+
+### mask
+
+Set lens mask on or off:
+
+```bash
+./mercury.py ipc1 mask on  # or off
+```
+
+Get mask status, invoke with no parameter.
+
+```bash
+$ ./mercury.py ipc1 mask
+INFO     sendRequest  Sending request: {'method': 'get', 'lens_mask': {'name': ['lens_mask_info']}}
+INFO     main         Lens mask is OFF
+INFO     main         Saving configs back
+INFO     main         Bye
+```
+
+## Interactive mode
+
+After logged in, you'll get an interactive shell. Requires `ptpython`.
+
+You could e.g. send your payload data to `mer.sendRequest`.
+
+```bash
+$ ./mercury.py ipc1 interactive
 INFO     login        Retrive RSA Pubkey and Nonce
 DEBUG    login        Response: 200 {'error_code': -40401, 'data': {'code': -40410, 'encrypt_type': ['1', '2'], 'key': 'MIGf<redacted>iwIDAQAB', 'nonce': '3f<redacted>0'}}
 DEBUG    login        Encrypted password: J+WJ2<redacted>sv4=
 INFO     login        Login with username [admin]
 DEBUG    login        Login response: 200 {'error_code': 0, 'stok': '9fafab<redacted>6dfec', 'user_group': 'root'}
 DEBUG    <module>     <__main__.MercuryIPC object at 0x1065c77d0>
-INFO     <module>     Mercury IPC is available at variable [mer], fire at will ;p
+INFO     <module>     Mercury IPC is available at variable [cam], fire at will ;p
 
->>> mer.send_request(mer.PAYLOAD_SET_LENMASK_ON)                                                                   
+>>> cam.send_request(cam.PAYLOAD_SET_LENMASK_ON)
 DEBUG    send_request Sending request: {'method': 'set', 'lens_mask': {'lens_mask_info': {'enabled': 'on'}}}
 DEBUG    send_request Response: 200 {'error_code': 0}
 <Response [200]>
 
->>> mer.send_request({"method":"do","preset":{"goto_preset": {"id": "3"}}})                                        
+>>> cam.send_request({"method":"do","preset":{"goto_preset": {"id": "3"}}})
 DEBUG    send_request Sending request: {'method': 'do', 'preset': {'goto_preset': {'id': '3'}}}
 DEBUG    send_request Response: 200 {'error_code': 0}
 <Response [200]>
@@ -113,7 +205,7 @@ DEBUG    send_request Response: 200 {'error_code': 0}
 //id
 //0 无
 //12288 你好
-//4096-4104 依次为 你好欢迎光临 ..... 
+//4096-4104 依次为 你好欢迎光临 .....
 //set enter or leave greetings 设置进入或离开语音
 {"method":"set","greeter":{"chn1_greeter_audio":{"enter_audio_id":"0"}}} 无
 {"method":"set","greeter":{"chn1_greeter_audio":{"leave_audio_id":"4104"}}}

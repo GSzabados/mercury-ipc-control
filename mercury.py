@@ -219,6 +219,7 @@ def main():
     parser.add_argument("-u", "--username", help="Camera admin username")
     parser.add_argument("-p", "--password", help="Camera admin password")
     parser.add_argument("-d", "--debug", action='store_true', help="Print additional debug logs")
+    parser.add_argument("--help", action="help", default=argparse.SUPPRESS, help="RT")
     parser.add_argument("camera", nargs='?', default='cmdline', help="Specify the Camera to use. default: cmdline")
     parser.add_argument("action", choices=functions, default="interactive", help="Functions to call")
     parser.add_argument("action_args", nargs=argparse.REMAINDER, help="Function arguments")
