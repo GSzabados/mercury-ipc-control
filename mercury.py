@@ -214,7 +214,7 @@ def main():
     functions = ["interactive", "send", "presets", "goto", 'mask']
 
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("-c", "--config", default="config.ini", help="config file to read IPC endpoints")
+    parser.add_argument("-c", "--config", default="mercury.ini", help="config file to read IPC endpoints")
     parser.add_argument("-h", "--host", help="Camera web interface URL")
     parser.add_argument("-u", "--username", help="Camera admin username")
     parser.add_argument("-p", "--password", help="Camera admin password")
