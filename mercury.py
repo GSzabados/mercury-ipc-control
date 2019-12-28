@@ -36,22 +36,35 @@ class MercuryIPC:
     def send_request(self, body, token=None):
         if token:
             self._token = token
-        self._log.debug(f"Sending request: {body}")
-        resp = self._s.post(urljoin(self._url, f"/stok={self._token}/ds"), json=body)
-        self._log.debug(f"Response: {resp.status_code} {resp.json()}")
+        while True:
+            self._log.debug(f"Sending request: {body}")
+            resp = self._s.post(urljoin(self._url, f"/stok={self._token}/ds"), json=body)
+            data = resp.json()
+            self._log.debug(f"Response: {resp.status_code} {data}")
+
+            if data["error_code"] == -40401 and "key" in data["data"]:
+                self._log.warning("Login token expired, re-logging in...")
+                self.login(previous_resp=resp)
+                self._log.info("Retrying previous request...")
+            else:
+                break
 
         return resp
 
-    def login(self, username=None, password=None):
+    def login(self, username=None, password=None, previous_resp=None):
         if username:
             self._username = username
         if password:
             self._password = password
         assert self._username and self._password, "Please provide username and password"
 
-        self._log.info("Retrive RSA Pubkey and Nonce")
-        resp = self._s.post(self._url, json=self.PAYLOAD_LOGIN)
-        self._log.debug(f"Response: {resp.status_code} {resp.json()}")
+        if previous_resp is None:
+            self._log.info("Retrive RSA Pubkey and Nonce")
+            resp = self._s.post(self._url, json=self.PAYLOAD_LOGIN)
+            self._log.debug(f"Response: {resp.status_code} {resp.json()}")
+        else:
+            self._log.info("Extracting Pubkey and Nonce from previous response.")
+            resp = previous_resp
         data = resp.json()["data"]
         pubkey = unquote(data["key"])
         nonce = data["nonce"]
@@ -136,7 +149,10 @@ class MercuryIPC:
     PAYLOAD_GOTO_PRESET = {"method":"do","preset":{"goto_preset": {"id": "1"}}}
 
     # PTZ Motors
-    PAYLOAD_DO_MOTOR_LEFT = {"method":"do","motor":{"move":{"x_coord":"10","y_coord":"0"}}}
+    PAYLOAD_DO_MOTOR_LEFT = {"method":"do","motor":{"move":{"x_coord":"-10","y_coord":"0"}}}
+    PAYLOAD_DO_MOTOR_RIGHT = {"method":"do","motor":{"move":{"x_coord":"10","y_coord":"0"}}}
+    PAYLOAD_DO_MOTOR_UP = {"method":"do","motor":{"move":{"x_coord":"0","y_coord":"10"}}}
+    PAYLOAD_DO_MOTOR_DOWN = {"method":"do","motor":{"move":{"x_coord":"0","y_coord":"-10"}}}
 
 
 if __name__ == "__main__":
