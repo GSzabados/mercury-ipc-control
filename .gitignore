@@ -1,2 +1,6 @@
 # irrelated dumps
 *.pcapng*
+
+# config files
+*.ini
+!*.example.ini
