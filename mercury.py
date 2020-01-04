@@ -121,7 +121,7 @@ class MercuryIPC:
             "url": self._url,
             "username": self._username,
             "password": self._password,
-            "token": self._token,
+            "token": self._token or "",
         }
 
     # ref https://github.com/gyje/tplink_encrypt/blob/9d93c2853169038e25f4e99ba6c4c7b833d5957f/tpencrypt.py
@@ -298,6 +298,8 @@ def main():
 
 
     log.info("Saving configs back")
+    if args.camera not in config:
+        config.add_section(args.camera)
     config[args.camera].update(cam.export())
     with open(args.config, "w") as f:
         config.write(f)
