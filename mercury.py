@@ -3,13 +3,18 @@
 
 import base64
 import logging
+import shlex
 import sys
 from ast import literal_eval
 from urllib.parse import unquote, urljoin
 
 import requests
 import rsa
-from ptpython.repl import embed
+try:
+    from ptpython.repl import embed
+except ImportError:
+    def embed(*args, **kwargs):
+        raise NotImplementedError("ptpython not installed")
 
 
 LOG_FORMAT = "%(levelname)-8s %(funcName)-12s %(message)s"
@@ -25,6 +30,7 @@ class MercuryIPC:
         self._log = logging.getLogger(__name__)
         self._log.setLevel(LOG_LEVEL)
         self._s = requests.Session()
+        self._state_changed = False
         # if dict: configs
         if isinstance(urlcfg, dict):
             self._url = urlcfg["url"]
@@ -44,10 +50,15 @@ class MercuryIPC:
     def sendRequest(self, body, token=None):
         if token:
             self._token = token
+            self._state_changed = True
         while True:
-            self._log.info(f"Sending request: {body}")
-            resp = self._s.post(urljoin(self._url, f"/stok={self._token}/ds"), json=body)
-            data = resp.json()
+            try:
+                self._log.info(f"Sending request: {body}")
+                resp = self._s.post(urljoin(self._url, f"/stok={self._token}/ds"), json=body)
+                data = resp.json()
+            except requests.exceptions.ConnectionError as e:
+                self._log.fatal(f"Error sending request: {e.message}")
+                raise SystemExit(1)
 
             if data["error_code"] == -40401 and "key" in data["data"]:
                 self._log.warning("Login token expired, re-logging in...")
@@ -100,6 +111,7 @@ class MercuryIPC:
         resp = self._s.post(self._url, json=payload)
         self._log.debug(f"Login response: {resp.status_code} {resp.json()}")
         self._token = resp.json()["stok"]
+        self._state_changed = True
         return self._token
 
     def isLoggedIn(self):
@@ -115,6 +127,9 @@ class MercuryIPC:
     def ensureLoggedIn(self):
         if not self.isLoggedIn():
             self.login()
+
+    def stateChanged(self):
+        return self._state_changed
 
     def export(self):
         return {
@@ -163,22 +178,59 @@ class MercuryIPC:
     PAYLOAD_GET_HARDDISK = {"method":"get","harddisk_manage":{"table":["hd_info"],"name":["harddisk"]}}
     PAYLOAD_GET_NETWORK_TYPE = {"method":"do","network":{"get_connection_type":"null"}}
     PAYLOAD_GET_CLOCK_STATUS = {"method":"get","system":{"name":["clock_status"]}}
-    PAYLOAD_GET_UNKNOWN = {"method":"get","cet":{"name":["vhttpd"]}}
+    PAYLOAD_GET_MEDIA_ENCRYPT = {"method":"get","cet":{"name":["media_encrypt"]}}
+    PAYLOAD_GET_VHTTPD = {"method":"get","cet":{"name":["vhttpd"]}}
+    PAYLOAD_GET_ALL = {"method":"get",
+        "harddisk_manage":{"table":["hd_info"],"name":["harddisk"]},
+        "wlan":{"name":["default_ap"]},
+        "msg_alarm":{"name":["chn1_msg_alarm_info"]},
+        "motion_detection":{"name":["motion_det"]},
+        "tamper_detection":{"name":["tamper_det"]},
+        "record_plan":{"name":["chn1_channel"]},
+        "greeter":{"name":["chn1_greeter_ctrl"]},
+        "cet":{"name":["media_encrypt"]}
+    }
+    PAYLOAG_GET_ALL2 =  {"method":"get",
+        "led":{"name":["config"]},
+        "target_track":{"name":["target_track_info"]},
+        "audio_config":{"name":["microphone","speaker"]},
+        "image":{"name":["switch","common"]}
+    }
+    PAYLOAD_GET_HOMEASSISTANT = {
+        "method":"get",
+        "led":{"name":["config"]},
+        "target_track":{"name":["target_track_info"]},
+        "lens_mask":{"name":["lens_mask_info"]},
+        "preset":{"name":["preset"]},
+        "msg_alarm":{"name":["chn1_msg_alarm_info"]},
+    }
+
+    PAYLOAD_CHECK_UPGRADE = {"method":"do","cloud_config":{"check_fw_version":"null"}}
 
     # === LED
+    PAYLOAD_GET_LED = {"method":"get","led":{"name":["config"]}}
     PAYLOAD_SET_LED_ON = {"method":"set","led":{"config":{"enabled":"on"}}}
     PAYLOAD_SET_LED_OFF = {"method":"set","led":{"config":{"enabled":"off"}}}
 
     # === object track
+    PAYLOAD_GET_TRACK =  {"method":"get","target_track":{"name":["target_track_info"]}}
     PAYLOAD_SET_TRACK_ON = {"method":"set","target_track":{"target_track_info":{"enabled":"on"}}}
     PAYLOAD_SET_TRACK_OFF = {"method":"set","target_track":{"target_track_info":{"enabled":"off"}}}
 
+    # === Video Flip
+    PAYLOAD_GET_VIDEO_FLIP =  {"method":"get","image":{"name":["switch"]}}
+    PAYLOAD_SET_VIDEO_FLIP_ON = {"method":"set","image":{"switch":{"flip_type":"center"}}}
+    PAYLOAD_SET_VIDEO_FLIP_OFF = {"method":"set","image":{"switch":{"flip_type":"off"}}}
+
     # === Alarm
-    PAYLOAD_SET_ALARM_ON ={"method":"do","msg_alarm":{"manual_msg_alarm":{"action":"start"}}}
-    PAYLOAD_SET_ALARM_OFF = {"method":"do","msg_alarm":{"manual_msg_alarm":{"action":"stop"}}}
+    PAYLOAD_GET_ALARM_PLAN = {"method":"get","msg_alarm_plan":{"name":["chn1_msg_alarm_plan"]}}
+    PAYLOAD_SET_ALARM_ON = {"method":"set","msg_alarm":{"chn1_msg_alarm_info":{"enabled":"on"}}}
+    PAYLOAD_SET_ALARM_OFF = {"method":"set","msg_alarm":{"chn1_msg_alarm_info":{"enabled":"off"}}}
+    PAYLOAD_ALARM_START ={"method":"do","msg_alarm":{"manual_msg_alarm":{"action":"start"}}}
+    PAYLOAD_ALARM_STOP = {"method":"do","msg_alarm":{"manual_msg_alarm":{"action":"stop"}}}
 
     # === Lens Mask
-    PAYLOAD_GET_LENSMASK_INFO = {"method":"get","lens_mask":{"name":["lens_mask_info"]}}
+    PAYLOAD_GET_LENSMASK = {"method":"get","lens_mask":{"name":["lens_mask_info"]}}
     # Response: { "lens_mask": { "lens_mask_info": { ".name": "lens_mask_info", ".type": "lens_mask_info", "enabled": "on" } }, "error_code": 0 }
     PAYLOAD_SET_LENSMASK_ON = {"method":"set","lens_mask":{"lens_mask_info":{"enabled":"on"}}}
     PAYLOAD_SET_LENSMASK_OFF = {"method":"set","lens_mask":{"lens_mask_info":{"enabled":"off"}}}
@@ -186,7 +238,7 @@ class MercuryIPC:
     # === PTZ Presets
     PAYLOAD_GET_PRESET = {"method":"get","preset":{"name":["preset"]}}
     PAYLOAD_SET_PRESET = {"method":"do","preset":{"set_preset":{"name":"CHANGEME","save_ptz":"1"}}}
-    # Response: {'id': '6', 'name': 'DEFAULT', 'error_code': 0
+    # Response: {'id': '6', 'name': 'DEFAULT', 'error_code': 0}
     PAYLOAD_GOTO_PRESET = {"method":"do","preset":{"goto_preset": {"id": "1"}}}
     PAYLOAD_DELETE_PRESET = {"method":"do","preset":{"remove_preset":{"id":["CHANGEME"]}}}
 
@@ -208,23 +260,29 @@ class MercuryIPC:
 def main():
     import argparse
     from configparser import ConfigParser
+    from pathlib import Path
 
     global LOG_LEVEL
 
     functions = ["interactive", "send", "presets", "goto", 'mask']
 
+    default_conf = Path(__file__).resolve().parent / "mercury.ini"
+
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("-c", "--config", default="mercury.ini", help="config file to read IPC endpoints")
+    parser.add_argument("-c", "--config", default=str(default_conf), help="config file to read IPC endpoints")
     parser.add_argument("-h", "--host", help="Camera web interface URL")
     parser.add_argument("-u", "--username", help="Camera admin username")
     parser.add_argument("-p", "--password", help="Camera admin password")
     parser.add_argument("-d", "--debug", action='store_true', help="Print additional debug logs")
+    parser.add_argument("-i", "--stdin", action='store_true', help="Append parameters from stdin")
     parser.add_argument("--help", action="help", default=argparse.SUPPRESS, help="RT")
     parser.add_argument("camera", nargs='?', default='cmdline', help="Specify the Camera to use. default: cmdline")
-    parser.add_argument("action", choices=functions, default="interactive", help="Functions to call")
+    parser.add_argument("action", nargs='?', choices=functions, default="interactive", help="Functions to call")
     parser.add_argument("action_args", nargs=argparse.REMAINDER, help="Function arguments")
 
     args = parser.parse_args()
+    if args.stdin:
+        args = parser.parse_args(shlex.split(None), args)
     config = ConfigParser()
     config.read(args.config)
 
@@ -265,13 +323,13 @@ def main():
         else:
             payload = literal_eval(payload)
         resp = cam.sendRequest(payload)
-        print(resp.json())
+        print(resp.text)
 
     elif cmd == "presets":
         info = cam.sendRequest(cam.PAYLOAD_GET_PRESET).json()["preset"]["preset"]
         printed = '\n'.join(f"{info['id'][i]:3s}{info['name'][i]:10s}"
                       for i in range(len(info['id'])))
-        print(f"\nPresets: \n{printed}\n")
+        log.info(f"\nPresets: \n{printed}\n")
 
     elif cmd == "goto":
         # 跳转到指定 preset
@@ -279,32 +337,36 @@ def main():
         payload = cam.PAYLOAD_GOTO_PRESET
         arg = args.action_args[0]
         payload["preset"]["goto_preset"]["id"] = arg
-        cam.sendRequest(payload)
+        resp = cam.sendRequest(payload)
+        print(resp.text)
 
     elif cmd == "mask":
         if len(args.action_args) > 0:
             # 设置镜头遮罩状态
             arg = args.action_args[0]
-            cam.sendRequest(cam.PAYLOAD_SET_LENSMASK_OFF if arg == "off" else cam.PAYLOAD_SET_LENSMASK_ON)
+            resp = cam.sendRequest(cam.PAYLOAD_SET_LENSMASK_OFF if arg == "off" else cam.PAYLOAD_SET_LENSMASK_ON)
         else:
             # 查询镜头遮罩状态
-            resp = cam.sendRequest(cam.PAYLOAD_GET_LENSMASK_INFO)
+            resp = cam.sendRequest(cam.PAYLOAD_GET_LENSMASK)
             # lens_mask": { "lens_mask_info
             status = resp.json()["lens_mask"]["lens_mask_info"]["enabled"]
             log.info(f"Lens mask is {status.upper()}")
-
+        print(resp.text)
     else:
         raise NotImplementedError(f"Command {cmd} not yet implemented")
 
 
-    log.info("Saving configs back")
-    if args.camera not in config:
-        config.add_section(args.camera)
-    config[args.camera].update(cam.export())
-    with open(args.config, "w") as f:
-        config.write(f)
+    if cam.stateChanged():
+        log.info("Saving configs back")
+        if args.camera not in config:
+            config.add_section(args.camera)
+        config[args.camera].update(cam.export())
+        with open(args.config, "w") as f:
+            config.write(f)
+    else:
+        log.info("Skipped config write-back, not changed.")
 
-    log.info("Bye")
+    log.debug("Bye")
 
 
 if __name__ == "__main__":
