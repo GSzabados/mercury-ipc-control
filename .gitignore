@@ -4,3 +4,10 @@
 # config files
 *.ini
 !*.example.ini
+
+# local settings
+.vscode/
+.python-version
+
+# debug
+/responses.py
